@@ -71,6 +71,7 @@ if __name__ == "__main__":
     tb_logger = TensorBoardLogger(
         save_dir=RUN_ROOT,
         name="tensorboard_logs",
+        version=RUN_NUMBER,
     )
 
     # Setup profiler
@@ -197,15 +198,15 @@ if __name__ == "__main__":
             filename="best_model",
             save_top_k=1,
             verbose=True,
-            monitor="val_loss",
-            mode="min",
+            monitor=CONFIG["hyperparameters"]["monitor"],
+            mode=CONFIG["hyperparameters"]["scheduler_mode"],
         )
 
         early_stopping_callback = EarlyStopping(
-            monitor="val_loss",
+            monitor=CONFIG["hyperparameters"]["monitor"],
             patience=CONFIG["hyperparameters"]["early_stopping_patience"],
             verbose=True,
-            mode="min",
+            mode=CONFIG["hyperparameters"]["scheduler_mode"],
         )
 
         # Callback for prediction visualization
@@ -225,7 +226,7 @@ if __name__ == "__main__":
             accelerator="gpu" if torch.cuda.is_available() else "cpu",
             devices=1,
             logger=tb_logger,
-            profiler=profiler,
+            profiler=profiler if PROFILER["enabled"] else None,
             log_every_n_steps=20,
             callbacks=[
                 checkpoint_callback,
@@ -247,23 +248,24 @@ if __name__ == "__main__":
     # When done training, fix decode problems in tensorboard/kineto - generated traces
     # see   # https://github.com/pytorch/pytorch/issues/121219
 
-    # List json files in profiler_logs dir
-    json_files = [
-        f for f in os.listdir(RUN_ROOT / "profiler_logs") if f.endswith(".json")
-    ]
+    if PROFILER["enabled"]:
+        # List json files in profiler_logs dir
+        json_files = [
+            f for f in os.listdir(RUN_ROOT / "profiler_logs") if f.endswith(".json")
+        ]
 
-    for json_file in json_files:
-        # Split filename and extension correctly even if there are multiple dots
-        file_stem, file_ext = os.path.splitext(json_file)
+        for json_file in json_files:
+            # Split filename and extension correctly even if there are multiple dots
+            file_stem, file_ext = os.path.splitext(json_file)
 
-        # Correctly replace invalid utf8 characters in the json file
-        replace_invalid_utf8(
-            RUN_ROOT / "profiler_logs" / json_file,
-            RUN_ROOT / "profiler_logs" / f"{file_stem}-fixed{file_ext}",
-        )
+            # Correctly replace invalid utf8 characters in the json file
+            replace_invalid_utf8(
+                RUN_ROOT / "profiler_logs" / json_file,
+                RUN_ROOT / "profiler_logs" / f"{file_stem}-fixed{file_ext}",
+            )
 
-        # Rename old json file
-        os.rename(
-            RUN_ROOT / "profiler_logs" / json_file,
-            RUN_ROOT / "profiler_logs" / f"{file_stem}-old.backup{file_ext}",
-        )
+            # Rename old json file
+            os.rename(
+                RUN_ROOT / "profiler_logs" / json_file,
+                RUN_ROOT / "profiler_logs" / f"{file_stem}-old.backup{file_ext}",
+            )

@@ -1,10 +1,12 @@
 # models.py
 
+import time
+
 import pytorch_lightning as pl
 import torch
 import torch.nn as nn
 import torchvision.ops as ops
-from torchmetrics import Accuracy, JaccardIndex
+from torchmetrics import Accuracy, F1Score, JaccardIndex, Precision, Recall
 from torchvision.models.swin_transformer import swin_v2_b
 
 from config import CONFIG
@@ -46,7 +48,7 @@ class SegmentationLightningModule(pl.LightningModule):
         self.label_smoothing = label_smoothing
 
         self.criterion = torch.nn.CrossEntropyLoss(
-            # TODO: decomment weight=self.class_weights,
+            weight=self.class_weights,
             label_smoothing=self.label_smoothing,
         )
 
@@ -54,10 +56,31 @@ class SegmentationLightningModule(pl.LightningModule):
         self.train_accuracy = Accuracy(
             task="multiclass", num_classes=num_classes, average="macro"
         )
+        self.train_iou = JaccardIndex(task="multiclass", num_classes=num_classes)
+        self.train_precision = Precision(
+            task="multiclass", num_classes=num_classes, average="macro"
+        )
+        self.train_recall = Recall(
+            task="multiclass", num_classes=num_classes, average="macro"
+        )
+        self.train_f1 = F1Score(
+            task="multiclass", num_classes=num_classes, average="macro"
+        )
+
         self.val_accuracy = Accuracy(
             task="multiclass", num_classes=num_classes, average="macro"
         )
         self.val_iou = JaccardIndex(task="multiclass", num_classes=num_classes)
+
+        self.val_precision = Precision(
+            task="multiclass", num_classes=num_classes, average="macro"
+        )
+        self.val_recall = Recall(
+            task="multiclass", num_classes=num_classes, average="macro"
+        )
+        self.val_f1 = F1Score(
+            task="multiclass", num_classes=num_classes, average="macro"
+        )
 
     def forward(self, x):
         return self.model(x)
@@ -65,17 +88,25 @@ class SegmentationLightningModule(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         images = batch["image"]
         masks = batch["mask"]
-        assert (
-            masks.min() >= 0 and masks.max() < self.num_classes
-        ), "Mask labels out of range"
+
         outputs = self.forward(images)
         loss = self.criterion(outputs, masks)
 
         preds = torch.argmax(outputs, dim=1)
         acc = self.train_accuracy(preds, masks)
+        iou = self.train_iou(preds, masks)
+        precision = self.train_precision(preds, masks)
+        recall = self.train_recall(preds, masks)
+        f1 = self.train_f1(preds, masks)
 
         self.log("train_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
         self.log("train_accuracy", acc, on_step=False, on_epoch=True, prog_bar=True)
+        self.log("train_iou", iou, on_step=False, on_epoch=True, prog_bar=True)
+        self.log(
+            "train_precision", precision, on_step=False, on_epoch=True, prog_bar=True
+        )
+        self.log("train_recall", recall, on_step=False, on_epoch=True, prog_bar=True)
+        self.log("train_f1", f1, on_step=False, on_epoch=True, prog_bar=True)
 
         return loss
 
@@ -84,16 +115,35 @@ class SegmentationLightningModule(pl.LightningModule):
         masks = batch["mask"]
         unique_labels = torch.unique(masks)
 
+        start_time = time.perf_counter()
         outputs = self.forward(images)
+        inference_time = time.perf_counter() - start_time
+
         loss = self.criterion(outputs, masks)
 
         preds = torch.argmax(outputs, dim=1)
         acc = self.val_accuracy(preds, masks)
         iou = self.val_iou(preds, masks)
+        precision = self.val_precision(preds, masks)
+        recall = self.val_recall(preds, masks)
+        f1 = self.val_f1(preds, masks)
+
+        self.log(
+            "inference_time",
+            inference_time,
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+        )
 
         self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
         self.log("val_accuracy", acc, on_step=False, on_epoch=True, prog_bar=True)
         self.log("val_iou", iou, on_step=False, on_epoch=True, prog_bar=True)
+        self.log(
+            "val_precision", precision, on_step=False, on_epoch=True, prog_bar=True
+        )
+        self.log("val_recall", recall, on_step=False, on_epoch=True, prog_bar=True)
+        self.log("val_f1", f1, on_step=False, on_epoch=True, prog_bar=True)
 
         return loss
 
@@ -111,7 +161,7 @@ class SegmentationLightningModule(pl.LightningModule):
         return {
             "optimizer": optimizer,
             "lr_scheduler": scheduler,
-            "monitor": "val_loss",
+            "monitor": CONFIG["hyperparameters"]["monitor"],
         }
 
 

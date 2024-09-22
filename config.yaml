@@ -1,0 +1,63 @@
+# config.yaml
+paths:
+  data_root: "./data/landcoverai"
+  runs_root: "./runs"
+  tensorboard_writer_folder: "runs"
+
+preprocessing:
+  image_size: [256, 256]
+  mean: [0.3686, 0.3971, 0.3442]
+  std: [0.1015, 0.0897, 0.0739]
+  p_horizontal_flip: 0.5
+  rotation_degrees: 15
+  color_jitter: 0.2
+  scale: [0.66, 1.0]
+  ratio: [0.75, 1.33]
+  crop_prob: 0.2
+
+hyperparameters:
+  batch_size: 16
+  num_workers: 8
+
+  num_classes: 5
+
+  epochs: 30
+  learning_rate: 0.0001
+  weight_decay: 0.0001
+
+  scheduler_mode: "max"
+  monitor: "val_iou"
+  scheduler_factor: 0.1
+  scheduler_patience: 5
+  gradient_accumulation_steps: 2
+
+  early_stopping_patience: 10
+
+  gradient_clip_val: 1.0
+
+  precision: 32
+
+model:
+  name: 'SegmentationModel'
+  pretrained_model_path: 'sentinel2_swinb_si_rgb.pth'
+  return_nodes:
+    features.0.0: 'stage1'
+    features.2: 'stage2'
+    features.4: 'stage3'
+    features.6: 'stage4'
+  in_channels_list: [128, 256, 512, 1024]
+  fpn_out_channels: 256
+  expected_channels:
+    stage1: 128
+    stage2: 256
+    stage3: 512
+    stage4: 1024
+  upsample_scale: 32
+  freeze_backbone: true
+  num_layers_to_freeze: 4
+
+  class_weights: [0.04354043551738842, 2.932903987816641, 0.07613333623671328, 0.39044851850190576, 1.5569737219273523]
+  label_smoothing: 0.1
+
+profiler:
+  enabled: false
