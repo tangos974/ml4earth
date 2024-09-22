@@ -1,0 +1,6 @@
+.venv
+training
+validation
+*.zip
+monkey*
+__pycache__
