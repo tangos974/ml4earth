@@ -4,3 +4,4 @@ validation
 *.zip
 monkey*
 __pycache__
+data/landcoverai
