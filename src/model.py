@@ -7,13 +7,26 @@ import torch
 import torch.nn as nn
 import torchvision.ops as ops
 from torchmetrics import Accuracy, F1Score, JaccardIndex, Precision, Recall
+from torchvision.models.feature_extraction import create_feature_extractor
 from torchvision.models.swin_transformer import swin_v2_b
 
 from config import CONFIG
 
 
-def load_pretrained_swin_transformer(model_path: str, device: torch.device):
+def freeze_backbone_layers(model, num_layers_to_freeze):
+    """
+    Freezes the first `num_layers_to_freeze` layers of the backbone.
+    Assumes that the backbone's layers are accessible via named_modules.
+    """
+    layers = list(model.named_modules())
+    # Exclude the top-level module
+    layers = layers[1:]
+    for name, layer in layers[:num_layers_to_freeze]:
+        for param in layer.parameters():
+            param.requires_grad = False
 
+
+def load_pretrained_swin_transformer(model_path: str, device: torch.device):
     backbone = swin_v2_b()
     full_state_dict = torch.load(model_path, map_location=device)
     # Extract just the Swin backbone parameters from the full state dict.
@@ -26,7 +39,57 @@ def load_pretrained_swin_transformer(model_path: str, device: torch.device):
     backbone.load_state_dict(swin_state_dict)
     backbone.head = nn.Identity()  # Remove the classification head
     backbone.to(device)
+
+    # Define the layers from which to extract features
+    return_nodes = CONFIG["model"]["return_nodes"]
+    backbone = create_feature_extractor(backbone, return_nodes=return_nodes)
+
+    # Freeze layers after feature extractor is created
+    if CONFIG["model"]["freeze_backbone"]:
+        freeze_backbone_layers(
+            backbone, num_layers_to_freeze=CONFIG["model"]["num_layers_to_freeze"]
+        )
+
     return backbone
+
+
+class SegmentationModel(nn.Module):
+    def __init__(self, backbone, num_classes):
+        super(SegmentationModel, self).__init__()
+        self.backbone = backbone
+
+        self.fpn = ops.FeaturePyramidNetwork(
+            in_channels_list=CONFIG["model"]["in_channels_list"],
+            out_channels=CONFIG["model"]["fpn_out_channels"],
+        )
+        self.seg_head = nn.Sequential(
+            nn.Conv2d(
+                CONFIG["model"]["fpn_out_channels"], 128, kernel_size=3, padding=1
+            ),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(128, num_classes, kernel_size=1),
+        )
+
+    def forward(self, x):
+        features = self.backbone(x)
+        # Ensure feature maps have correct shape
+        expected_channels = CONFIG["model"]["expected_channels"]
+        for name, feature in features.items():
+            # Check if feature has shape [batch_size, height, width, channels]
+            if feature.shape[1] != expected_channels.get(name, -1):
+                # Assume shape is [batch_size, height, width, channels], permute to [batch_size, channels, height, width]
+                features[name] = feature.permute(0, 3, 1, 2).contiguous()
+        fpn_out = self.fpn(features)
+        x = fpn_out["stage4"]  # Use the highest-level feature map
+        x = self.seg_head(x)
+        # Upsample to match the input spatial dimensions
+        x = nn.functional.interpolate(
+            x,
+            scale_factor=CONFIG["model"]["upsample_scale"],
+            mode="bilinear",
+            align_corners=False,
+        )
+        return x
 
 
 class SegmentationLightningModule(pl.LightningModule):
@@ -71,7 +134,6 @@ class SegmentationLightningModule(pl.LightningModule):
             task="multiclass", num_classes=num_classes, average="macro"
         )
         self.val_iou = JaccardIndex(task="multiclass", num_classes=num_classes)
-
         self.val_precision = Precision(
             task="multiclass", num_classes=num_classes, average="macro"
         )
@@ -113,7 +175,6 @@ class SegmentationLightningModule(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         images = batch["image"]
         masks = batch["mask"]
-        unique_labels = torch.unique(masks)
 
         start_time = time.perf_counter()
         outputs = self.forward(images)
@@ -163,57 +224,3 @@ class SegmentationLightningModule(pl.LightningModule):
             "lr_scheduler": scheduler,
             "monitor": CONFIG["hyperparameters"]["monitor"],
         }
-
-
-def freeze_backbone_layers(model, num_layers_to_freeze):
-    """Freezes the first num_layers_to_freeze layers of the backbone."""
-    layers = list(model.features.children())
-    for layer in layers[:num_layers_to_freeze]:
-        for param in layer.parameters():
-            param.requires_grad = False
-
-
-class SegmentationModel(nn.Module):
-    def __init__(self, backbone, num_classes):
-        super(SegmentationModel, self).__init__()
-        self.backbone = backbone
-
-        if CONFIG["model"]["freeze_backbone"]:
-            # Freeze the first few layers, keeping others trainable
-            freeze_backbone_layers(
-                self.backbone,
-                num_layers_to_freeze=CONFIG["model"]["num_layers_to_freeze"],
-            )
-
-        self.fpn = ops.FeaturePyramidNetwork(
-            in_channels_list=CONFIG["model"]["in_channels_list"],
-            out_channels=CONFIG["model"]["fpn_out_channels"],
-        )
-        self.seg_head = nn.Sequential(
-            nn.Conv2d(
-                CONFIG["model"]["fpn_out_channels"], 128, kernel_size=3, padding=1
-            ),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(128, num_classes, kernel_size=1),
-        )
-
-    def forward(self, x):
-        features = self.backbone(x)
-        # Ensure feature maps have correct shape
-        expected_channels = CONFIG["model"]["expected_channels"]
-        for name, feature in features.items():
-            if feature.shape[1] != expected_channels.get(name, -1):
-                features[name] = feature.permute(
-                    0, 3, 1, 2
-                )  # Adjust dimensions if necessary
-        fpn_out = self.fpn(features)
-        x = fpn_out["stage4"]  # Use the highest-level feature map
-        x = self.seg_head(x)
-        # Upsample to match the input spatial dimensions
-        x = nn.functional.interpolate(
-            x,
-            scale_factor=CONFIG["model"]["upsample_scale"],
-            mode="bilinear",
-            align_corners=False,
-        )
-        return x

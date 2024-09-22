@@ -24,7 +24,7 @@ class BaseVisualizer(pl.Callback):
         Returns:
             Tensor: RGB image tensor with shape [3, H, W].
         """
-        # Define colors for each class
+        # Define colors for each class (Customize as needed)
         colors = torch.tensor(
             [
                 [30, 30, 30],  # Background - soft dark grey
