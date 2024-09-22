@@ -7,3 +7,4 @@ torchvision==0.18.1
 colorlog==6.8.2
 huggingface-hub==0.25.0
 matplotlib==3.9.2
+rich

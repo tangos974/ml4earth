@@ -5,3 +5,4 @@ validation
 monkey*
 __pycache__
 data/landcoverai
+sentinel2_swinb_si_rgb.pth

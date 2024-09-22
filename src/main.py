@@ -39,6 +39,10 @@ from viz import visualize_samples
 
 MODEL_NAME = CONFIG["model"]["name"]
 
+# Ensure runs root exists by creating it if it doesn't
+os.makedirs(RUNS_ROOT, exist_ok=True)
+
+
 if __name__ == "__main__":
 
     if "--run_number" in sys.argv:
@@ -81,7 +85,11 @@ if __name__ == "__main__":
             filename="profile",
             activities=[
                 torch.profiler.ProfilerActivity.CPU,
-                torch.profiler.ProfilerActivity.CUDA,
+                (
+                    torch.profiler.ProfilerActivity.CUDA
+                    if torch.cuda.is_available()
+                    else None
+                ),
             ],
             schedule=torch.profiler.schedule(wait=1, warmup=1, active=3, repeat=2),
             on_trace_ready=torch.profiler.tensorboard_trace_handler(
@@ -108,10 +116,15 @@ if __name__ == "__main__":
     log_config(config=CONFIG, logger=LOGGER)
 
     LOGGER.info("Using device: %s", device)
-    LOGGER.debug("Device infos: %s", torch.cuda.get_device_properties(device))
-    device_props = torch.cuda.get_device_properties(device)
-    LOGGER.debug("Compute capability: %d.%d", device_props.major, device_props.minor)
-    LOGGER.debug("Number of CUDA cores: %d", device_props.multi_processor_count * 128)
+    if torch.cuda.is_available():
+        LOGGER.debug("Device infos: %s", torch.cuda.get_device_properties(device))
+        device_props = torch.cuda.get_device_properties(device)
+        LOGGER.debug(
+            "Compute capability: %d.%d", device_props.major, device_props.minor
+        )
+        LOGGER.debug(
+            "Number of CUDA cores: %d", device_props.multi_processor_count * 128
+        )
 
     # Set up data transforms
     train_transform = TrainTransform()
