@@ -111,7 +111,7 @@ Vizualising the inferred masks and comparing them to their ground truth showed t
 
 ![output.png](data/screenshots/output.png)
 
-As for inference time, our model was able to infer the masks in just 0.5 seconds on a local machine.
+As for inference time, our model was able to infer the masks in just 0.5 seconds on a standard laptop.
 
 ![plot_metrics.png](data/screenshots/plot_metrics.png)
 
@@ -119,7 +119,12 @@ As for inference time, our model was able to infer the masks in just 0.5 seconds
 
 - Dealing with the class imbalance in the dataset, certain classes like roads and buildings are underrepresented.
 - Optimizing the model’s training on a local GPU, which required efficient memory and compute resource management. Training approximated a couple of hours, even after scaleing images down to 225x225.
-- Despite our best efforts, we faced difficulty improving certain performance metrics. For instance, our model's IoU, validation accuracy, and F1 score did not exceed X, X, and X, respectively.
+- Despite our best efforts, we faced difficulty improving certain performance metrics. For instance, our model's IoU, validation accuracy, and F1 score did not exceed 0.56, 0.65, and 0.68, respectively. We think this is due to three main factors:
+
+  - Class imbalance (see [class distribution graph](data/screenshots/Class_distribution.png))
+  - Subpar hyperparameters and config (Class weights, label smoothing, etc.)
+  - Lack of data disparity. We believe training our model on a larger dataset would be beneficial, particlarily one featuring more urban areas.
+
 - Initially, we tried using TerraTorch for model training, but it proved to be too slow on our local machine, hindering our ability to iterate quickly. We decided we would both learn more and have more control over where compute resources are spent by making our own run and config handler.
 
 ## Note on Code Structure
@@ -142,6 +147,12 @@ Papers on Swin Transformer:
 
 - [Swin Transformer:  Swin Transformer V2: Scaling Up Capacity and Resolution](https://arxiv.org/pdf/2111.09883v2.pdf)
 
-- [ Swin Transformer: Hierarchical Vision Transformer using Shifted Windows](https://arxiv.org/pdf/2103.14030v2.pdf)
+- [Swin Transformer: Hierarchical Vision Transformer using Shifted Windows](https://arxiv.org/pdf/2103.14030v2.pdf)
 
-[JupyterNotebooks + Windows + Cuda = 🤯](https://github.com/pytorch/pytorch/issues/12831)
+- [Feature Pyramid Networks for Object Detection](https://arxiv.org/pdf/1612.03144v2.pdf)
+
+- [TorchGeo Docs](https://torchgeo.readthedocs.io/en/stable/)
+
+- [TorchVision Docs](https://pytorch.org/vision/stable/)
+
+- [JupyterNotebooks + Windows + Cuda = 🤯](https://github.com/pytorch/pytorch/issues/12831)
