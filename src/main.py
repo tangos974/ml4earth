@@ -1,4 +1,5 @@
 # main.py
+import argparse
 import os
 import sys
 
@@ -40,29 +41,49 @@ from viz import visualize_samples
 MODEL_NAME = CONFIG["model"]["name"]
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Train Segmentation Model")
+    parser.add_argument(
+        "--run_number",
+        type=int,
+        help="Run number for the current training.",
+    )
+    parser.add_argument(
+        "--resume_from_checkpoint",
+        type=str,
+        default=None,
+        help="Path to the checkpoint to resume training from.",
+    )
+    parser.add_argument(
+        "--dataload_test",
+        action="store_true",
+        help="If set, only test data loading and exit.",
+    )
+    args = parser.parse_args()
 
-    if "--run_number" in sys.argv:
-        # Get run number from command line
-        run_number = int(sys.argv[sys.argv.index("--run_number") + 1].split("_")[-1])
-
+    if args.run_number is not None:
+        RUN_NUMBER = args.run_number
+    elif args.resume_from_checkpoint:
+        # Extract run number from the checkpoint path
+        run_id = os.path.basename(os.path.dirname(args.resume_from_checkpoint))
+        RUN_NUMBER = int(run_id.split("_")[-1])
     else:
-        # List already present run numbers for model name
+        # Existing logic to determine RUN_NUMBER
         run_names: list[str] = [
             f.split("_")[-1] for f in os.listdir(RUNS_ROOT) if f.startswith(MODEL_NAME)
         ]
 
         if len(run_names) == 0:
             RUN_NUMBER = 0
-
         else:
             RUN_NUMBER = int(max(run_names)) + 1
 
-    # Generate run_id
-    run_id = f"{MODEL_NAME}_{RUN_NUMBER}"
-
-    # Generate this run's folder in the runs root
-    os.makedirs(RUNS_ROOT / run_id, exist_ok=True)
-    RUN_ROOT = RUNS_ROOT / run_id
+    if args.resume_from_checkpoint:
+        run_id = f"{MODEL_NAME}_{RUN_NUMBER}"
+        RUN_ROOT = RUNS_ROOT / run_id
+    else:
+        run_id = f"{MODEL_NAME}_{RUN_NUMBER}"
+        RUN_ROOT = RUNS_ROOT / run_id
+        os.makedirs(RUN_ROOT, exist_ok=True)
 
     # Logger
     LOGGER = setup_logger(RUN_ROOT, run_id)
@@ -180,14 +201,26 @@ if __name__ == "__main__":
         learning_rate = CONFIG["hyperparameters"]["learning_rate"]
         weight_decay = CONFIG["hyperparameters"]["weight_decay"]
 
-        lightning_model = SegmentationLightningModule(
-            model=model,
-            num_classes=num_classes,
-            learning_rate=learning_rate,
-            weight_decay=weight_decay,
-            class_weights=class_weights,
-            label_smoothing=label_smoothing,
-        )
+        if args.resume_from_checkpoint:
+            LOGGER.info(f"Loading model from checkpoint: {args.resume_from_checkpoint}")
+            lightning_model = SegmentationLightningModule.load_from_checkpoint(
+                checkpoint_path=args.resume_from_checkpoint,
+                model=model,
+                num_classes=num_classes,
+                learning_rate=learning_rate,
+                weight_decay=weight_decay,
+                class_weights=class_weights,
+                label_smoothing=label_smoothing,
+            )
+        else:
+            lightning_model = SegmentationLightningModule(
+                model=model,
+                num_classes=num_classes,
+                learning_rate=learning_rate,
+                weight_decay=weight_decay,
+                class_weights=class_weights,
+                label_smoothing=label_smoothing,
+            )
 
         # Instantiate the progress bar
         progress_bar = RichProgressBar()
@@ -242,7 +275,10 @@ if __name__ == "__main__":
 
     # Start training
     trainer.fit(
-        lightning_model, train_dataloaders=train_loader, val_dataloaders=val_loader
+        lightning_model,
+        train_dataloaders=train_loader,
+        val_dataloaders=val_loader,
+        ckpt_path=args.resume_from_checkpoint if args.resume_from_checkpoint else None,
     )
 
     # When done training, fix decode problems in tensorboard/kineto - generated traces
