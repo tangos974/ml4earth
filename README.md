@@ -105,7 +105,11 @@ We ran the training on a local NVIDIA GeForce RTX 3060 GPU with the following ke
 
 With a max IoU of 0.557, a max F1 Score of 0.651, and validation accuracy peaking at 0.683 on our most successful run, our model demonstrates strong segmentation capabilities, particularly in distinguishing between different land cover types such as roads, buildings, and vegetation. While the performance shows clear improvements over time, there are still some fluctuations in metrics like IoU and validation loss, suggesting room for further fine-tuning.
 
+![good_for_forests.png](data/screenshots/good_for_forests.png)
+
 Vizualising the inferred masks and comparing them to their ground truth showed that while the model performs well for the two most present classes, Background and Building, it performs worse on water, and significantly worse on roads and buildings. We believe this is partly due to the class imbalance in the dataset, partly to the fact we had to downscale the images, and more efforts could be made to improve the model's performance.
+
+![output.png](data/screenshots/output.png)
 
 As for inference time, our model was able to infer the masks in just 0.5 seconds on a local machine.
 
