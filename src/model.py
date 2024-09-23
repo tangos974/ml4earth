@@ -9,7 +9,7 @@ import torchvision.ops as ops
 from torchmetrics import Accuracy, F1Score, JaccardIndex, Precision, Recall
 from torchvision.models.swin_transformer import swin_v2_b
 
-from config import CONFIG
+from src.config import CONFIG
 
 
 def load_pretrained_swin_transformer(model_path: str, device: torch.device):
@@ -48,7 +48,7 @@ class SegmentationLightningModule(pl.LightningModule):
         self.label_smoothing = label_smoothing
 
         self.backbone = load_pretrained_swin_transformer(
-            model_path=CONFIG["pretrained_model_path"], device=self.device
+            model_path=CONFIG["model"]["pretrained_model_path"], device=self.device
         )
         self.model = SegmentationModel(backbone=self.backbone, num_classes=num_classes)
 
